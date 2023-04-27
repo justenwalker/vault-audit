@@ -1,0 +1,102 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # you may remove this if you don't need go generate
+    - go generate ./...
+builds:
+  - id: vault-audit
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+gomod:
+  proxy: false
+  env:
+    - GOPROXY=https://proxy.golang.org,direct
+    - GOSUMDB=sum.golang.org
+    - GOPRIVATE=github.com/justenwalker/
+  mod: mod
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+    - goos: windows
+      format: zip
+universal_binaries:
+  - replace: true
+dockers:
+  - id: docker-amd64
+    image_templates:
+      - "justenwalker/vault-audit:{{ .Version }}-amd64"
+      - "justenwalker/vault-audit:v{{ .Major }}-amd64"
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: docker/goreleaser/Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/amd64"
+  - id: docker-arm64
+    image_templates:
+      - "justenwalker/vault-audit:{{ .Version }}-arm64"
+      - "justenwalker/vault-audit:v{{ .Major }}-arm64"
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: docker/goreleaser/Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--platform=linux/arm64"
+docker_manifests:
+  - id: docker-manifest-tag
+    use: docker
+    name_template: "justenwalker/vault-audit:{{ .Version }}"
+    image_templates:
+      - "justenwalker/vault-audit:{{ .Version }}-amd64"
+      - "justenwalker/vault-audit:{{ .Version }}-arm64"
+  - id: docker-manifest-major
+    use: docker
+    name_template: "justenwalker/vault-audit:{{ .Version }}"
+    image_templates:
+      - "justenwalker/vault-audit:v{{ .Major }}-amd64"
+      - "justenwalker/vault-audit:v{{ .Major }}-arm64"
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'

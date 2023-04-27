@@ -1,0 +1,68 @@
+version: "3.9"
+services:
+  vault-server:
+    image: vault:1.13.1
+    restart: always
+    volumes:
+      - ./docker/compose/files:/config
+      - vault_data:/var/lib/vault/data
+      - audit_data:/var/log/vault:rw
+    ports:
+      - "8201:8200/tcp"
+    cap_add:
+      - IPC_LOCK
+    container_name: vault-server
+    entrypoint: "vault server -config=/config/vault-config.hcl"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://vault-server:8200/ui/ || exit 1"]
+      interval: 10s
+      retries: 12
+      start_period: 10s
+      timeout: 10s
+    networks:
+      vault-network:
+        ipv4_address: 172.21.0.10
+        aliases:
+          - vault-server
+  vault-agent:
+    image: vault:1.13.1
+    restart: always
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./docker/compose/files:/config
+    environment:
+      VAULT_ADDR: "http://vault-server:8200"
+    container_name: vault-agent
+    entrypoint: "vault agent -log-level debug -config=/config/vault-agent.hcl"
+    depends_on:
+      vault-server:
+        condition: service_healthy
+    networks:
+      vault-network:
+        ipv4_address: 172.21.0.11
+        aliases:
+          - vault-agent
+  vault-audit:
+    build:
+      context: .
+      dockerfile: ./docker/compose/Dockerfile
+    command:
+      - "-addr"
+      - "unix:///var/log/vault/audit.sock"
+    volumes:
+      - audit_data:/var/log/vault:rw
+    container_name: vault-audit
+    networks:
+      vault-network:
+        ipv4_address: 172.21.0.12
+        aliases:
+          - vault-audit
+networks:
+  vault-network:
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+volumes:
+  audit_data: {}
+  vault_data: {}
